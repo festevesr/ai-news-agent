@@ -3,7 +3,10 @@ name: Daily AI News Digest
 on:
   schedule:
     - cron: '0 13 * * *'   # 8:00 AM Lima|Peru time (UTC-5)
-  workflow_dispatch:                     # lets you trigger manually too
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   send-digest:
