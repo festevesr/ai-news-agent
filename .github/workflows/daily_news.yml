@@ -1,0 +1,25 @@
+name: Daily AI News Digest
+
+on:
+  schedule:
+    - cron: '0 13 * * *'   # 8:00 AM Lima|Peru time (UTC-5)
+  workflow_dispatch:                     # lets you trigger manually too
+
+jobs:
+  send-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install google-generativeai requests pytz
+      - name: Run agent
+        env:
+          GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
+          GMAIL_USER:       ${{ secrets.GMAIL_USER }}
+          GMAIL_PASSWORD:   ${{ secrets.GMAIL_PASSWORD }}
+          TO_EMAIL:         ${{ secrets.TO_EMAIL }}
+          NEWS_RSS_URL:     ${{ secrets.NEWS_RSS_URL }}
+        run: python agent.py
