@@ -14,6 +14,7 @@ import re
 from google import genai
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from bs4 import BeautifulSoup
 from datetime import date
 
 # ============================================================
@@ -37,60 +38,104 @@ def fetch_ai_news():
 
     headlines = ""
     links = {}
+    articles_text = {}
+
     for i, item in enumerate(items, 1):
         title  = item.findtext("title", "No title")
         link   = item.findtext("link", "")
         source = item.findtext("source", "Unknown")
+
         headlines += f"{i}. {title} ({source})\n"
         links[i] = (title, link, source)
 
-    print(f"Fetched {len(items)} headlines")
-    return headlines, links
+        # fetch full article text
+        print(f"Fetching article {i}/15: {title[:50]}...")
+        articles_text[i] = fetch_article_text(link)
+
+    print(f"Fetched {len(items)} headlines and articles")
+    return headlines, links, articles_text
+
+# ============================================================
+#  FETCH FULL ARTICLE
+# ============================================================
+
+def fetch_article_text(url, max_chars=3000):
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; NewsBot/1.0)"}
+        response = requests.get(url, timeout=8, headers=headers)
+        soup = BeautifulSoup(response.text, "lxml")
+
+        for tag in soup(["script", "style", "nav", "footer", "header",
+                          "aside", "form", "iframe"]):
+            tag.decompose()
+
+        text = soup.get_text(separator=" ", strip=True)
+
+        text = re.sub(r"\s+", " ", text).strip()
+
+        return text[:max_chars]
+
+    except Exception as e:
+        print(f"Could not fetch article: {e}")
+        return ""
 
 # ============================================================
 #  GEMINI SUMMARY
 # ============================================================
 
-def summarize_with_gemini(headlines):
+def summarize_with_gemini(headlines, articles_text):
     client = genai.Client(api_key=GEMINI_API_KEY)
 
-    prompt = f"""You are an expert AI news curator. I will give you numbered headlines.
+    # build enriched headlines with article content
+    enriched = ""
+    for i, line in enumerate(headlines.strip().split("\n"), 1):
+        enriched += f"\n{line}\n"
+        content = articles_text.get(i, "")
+        if content:
+            enriched += f"   Article content: {content}\n"
+        else:
+            enriched += f"   Article content: (not available)\n"
 
+    prompt = f"""You are an expert AI news curator. I will give you numbered headlines,
+                 each followed by the actual article content.
+ 
                  IMPORTANT: Respond ONLY with a valid JSON array. No markdown, no code fences, no explanation,
                  no trailing commas, no comments. Pure raw JSON only.
-     
+ 
                  Format:
                  [
                  {{
                      "number": <integer, the headline number from the list>,
                      "title": "<original title>",
                      "source": "<source name>",
-                     "summary": "<2 sentences summarising the story>",
-                     "why_matters": "<1 sentence explaining why this matters>"
+                     "summary": "<3 sentences summarising the story using the article content, not just the headline>",
+                     "why_matters": "<1 sentence explaining why this matters to the AI field>",
+                     "key_detail": "<1 concrete specific detail from the article that most people would miss>"
                  }}
                  ]
-     
-                 Pick the 5 most important stories. Use the exact headline number from the list.
-     
+ 
+                 Pick the 5 most important stories. Use the actual article content to write deep, specific summaries.
+                 Avoid vague summaries — include real names, numbers, and facts from the article when available.
+ 
                  Then add this object at the end of the array:
                  {{
                  "number": 0,
                  "title": "Big Picture",
                  "source": "",
-                 "summary": "<2 sentences on the overall AI trend today>",
-                 "why_matters": ""
+                 "summary": "<2 sentences on the overall AI trend today based on all the articles>",
+                 "why_matters": "",
+                 "key_detail": ""
                  }}
-     
-                 Headlines:
-                 {headlines}
+ 
+                 Headlines and articles:
+                 {enriched}
                  """
 
     response = client.models.generate_content(
         model="gemini-3.1-flash-lite",
         contents=prompt
     )
-
-    print("Digest generated")
+    print("✅ Digest generated")
     return response.text
 
 # ============================================================
@@ -158,7 +203,8 @@ def build_html_email(digest_json_text, links):
             .story a   {{ color: #4f8ef7; text-decoration: none; }}
             .story a:hover {{ text-decoration: underline; }}
             .summary   {{ color: #444; font-size: 14px; margin: 0 0 6px 0; }}
-            .matters   {{ color: #e07b00; font-size: 13px; font-weight: bold; }}
+            .matters   {{ color: #e07b00; font-size: 13px; font-weight: bold; margin: 0 0 4px 0; }}
+            .detail    {{ color: #2a7a2a; font-size: 13px; font-style: italic; margin: 0 0 4px 0; }}
             .source    {{ color: #aaa; font-size: 12px; margin-top: 6px; }}
             .bigpic    {{ background: #1a1a2e; color: white; border-radius: 8px;
                             padding: 18px 20px; margin-top: 28px; }}
@@ -184,21 +230,24 @@ def build_html_email(digest_json_text, links):
                      """
         else:
             story_num += 1
-            num    = s["number"]
-            link   = links.get(num, ("", "#", ""))[1]
-            source = s.get("source", "")
+            num        = s["number"]
+            link       = links.get(num, ("", "#", ""))[1]
+            source     = s.get("source", "")
+            key_detail = s.get("key_detail", "")
+
             html += f"""
                      <div class="story">
                          <h2>{story_num}. <a href="{link}" target="_blank">{s["title"]}</a></h2>
                          <p class="summary">{s["summary"]}</p>
                          <p class="matters">💡 Why it matters: {s["why_matters"]}</p>
+                         {"<p class='detail'>🔍 Key detail: " + key_detail + "</p>" if key_detail else ""}
                          <p class="source">📰 {source}</p>
                      </div>
                      """
 
     html += """
             <div class="footer">
-                📡 Source: Google News RSS &nbsp;·&nbsp; 🤖 Summarized by Gemini 2.5 Flash
+                📡 Source: Google News RSS &nbsp;·&nbsp; 🤖 Summarized by Gemini 2.0 Flash
             </div>
             </div>
             </body>
@@ -228,10 +277,10 @@ def send_email(html_content):
 # ============================================================
 if __name__ == "__main__":
     print("1) Fetching headlines...")
-    headlines, links = fetch_ai_news()
+    headlines, links, articles_text = fetch_ai_news()
 
     print("2) Summarising with Gemini...")
-    digest_json = summarize_with_gemini(headlines)
+    digest_json = summarize_with_gemini(headlines, articles_text)
     print("Raw Gemini output:", digest_json[:300])
 
     print("3) Building HTML email...")

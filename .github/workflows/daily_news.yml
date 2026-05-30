@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install google-genai requests
+        run: pip install google-genai requests python-dotenv beautifulsoup4 lxml
       - name: Run agent
         env:
           GEMINI_API_KEY:   ${{ secrets.GEMINI_API_KEY }}
