@@ -1,6 +1,6 @@
 # 🤖 Daily AI News Agent
 
-A fully automated agent that fetches the latest AI news every morning, summarizes it using Google Gemini, and delivers a beautifully formatted HTML digest to your inbox — completely free.
+A fully automated agent that fetches the latest AI news every morning, summarizes it using Google Gemini, and delivers a formatted HTML digest to your inbox — completely free.
 
 ---
 
@@ -11,7 +11,7 @@ This project is a Python-based AI agent that runs automatically every day at 8:0
 ### How it works
 
 ```
-Google News RSS → Fetch full article text → Gemini 2.0 Flash → HTML Email
+Google News RSS → Fetch full article text → Gemini 3.1 Flash Lite → HTML Email
 ```
 
 1. **Fetches** the top 15 AI headlines from Google News RSS
@@ -40,7 +40,7 @@ Google News RSS → Fetch full article text → Gemini 2.0 Flash → HTML Email
 |---|---|---|
 | News source | Google News RSS | Free |
 | Article scraping | BeautifulSoup4 + lxml | Free |
-| AI summarization | Google Gemini 2.0 Flash API | Free |
+| AI summarization | Google Gemini 3.1 Flash Lite API | Free |
 | Scheduler | GitHub Actions | Free |
 | Email delivery | Gmail SMTP | Free |
 | **Total** | | **$0** |
